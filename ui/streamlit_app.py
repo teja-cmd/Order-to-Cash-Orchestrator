@@ -20,6 +20,18 @@ st.set_page_config(page_title="Order-to-Cash Orchestrator", layout="wide")
 st.title("Multi-Agent Order-to-Cash Orchestrator")
 st.markdown("Submit an order to the multi-agent system and watch the real-time handoff log.")
 
+# Load site CSS from the repo `static/styles.css` so Streamlit shows the same styling
+def _load_local_css(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            css = f.read()
+        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+    except Exception:
+        pass
+
+css_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'styles.css')
+_load_local_css(css_file)
+
 # Load mock data
 data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
 mock_file = os.path.join(data_dir, 'mock_orders.json')
