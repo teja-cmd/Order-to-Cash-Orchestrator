@@ -1,0 +1,69 @@
+import streamlit as st
+import requests
+import json
+import os
+import sys
+
+# Add parent directory to path so imports work correctly in Streamlit Cloud
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from app.db import DB_PATH
+if not os.path.exists(DB_PATH):
+    import seed_data
+    seed_data.seed_db()
+
+from app.orchestrator import OrderOrchestrator
+from app.schemas import OrderPayload
+
+st.set_page_config(page_title="Order-to-Cash Orchestrator", layout="wide")
+
+st.title("Multi-Agent Order-to-Cash Orchestrator")
+st.markdown("Submit an order to the multi-agent system and watch the real-time handoff log.")
+
+# Load mock data
+data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+mock_file = os.path.join(data_dir, 'mock_orders.json')
+
+scenarios = {}
+if os.path.exists(mock_file):
+    with open(mock_file, 'r') as f:
+        scenarios = json.load(f)
+
+scenario_names = list(scenarios.keys()) if scenarios else ["No mock data found"]
+selected_scenario = st.selectbox("Select a test scenario:", scenario_names)
+
+if selected_scenario in scenarios:
+    payload_str = json.dumps(scenarios[selected_scenario], indent=2)
+else:
+    payload_str = "{}"
+    
+payload = st.text_area("Order Payload (JSON):", value=payload_str, height=250)
+
+if st.button("Process Order"):
+    try:
+        order_data = json.loads(payload)
+        order_payload = OrderPayload(**order_data)
+        with st.spinner("Processing..."):
+            orchestrator = OrderOrchestrator()
+            result = orchestrator.process_order(order_payload)
+            
+            st.subheader("Processing Result")
+            status_color = "green" if result.final_status == "COMPLETED" else "orange" if "PARTIAL" in result.final_status else "red"
+            st.markdown(f"**Final Status**: :{status_color}[{result.final_status}]")
+            st.write(result.message)
+            
+            if result.invoice:
+                with st.expander("View Invoice Details"):
+                    st.json(result.invoice.model_dump() if hasattr(result.invoice, 'model_dump') else result.invoice.dict())
+            
+            st.subheader("Agent Handoff Log")
+            for entry in result.handoff_log:
+                direction = "➡️" if entry.direction == "REQUEST" else "⬅️"
+                st.markdown(f"""
+                **Step {entry.step}** ({entry.timestamp}):  
+                {entry.from_agent} {direction} {entry.to_agent}  
+                `{entry.summary}`
+                """)
+                st.divider()
+    except Exception as e:
+        st.error(f"Failed to process: {str(e)}")

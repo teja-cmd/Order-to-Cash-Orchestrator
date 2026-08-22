@@ -1,0 +1,7 @@
+fastapi
+pydantic
+streamlit
+pytest
+anthropic
+uvicorn
+sqlalchemy

@@ -1,0 +1,29 @@
+{
+    "happy_path": {
+        "customer_id": 1,
+        "line_items": [
+            {"product_id": 1, "quantity": 10},
+            {"product_id": 2, "quantity": 5}
+        ]
+    },
+    "insufficient_inventory": {
+        "customer_id": 1,
+        "line_items": [
+            {"product_id": 1, "quantity": 10},
+            {"product_id": 3, "quantity": 5},
+            {"product_id": 4, "quantity": 5}
+        ]
+    },
+    "high_risk_customer": {
+        "customer_id": 2,
+        "line_items": [
+            {"product_id": 1, "quantity": 100}
+        ]
+    },
+    "invalid_order": {
+        "customer_id": 999,
+        "line_items": [
+            {"product_id": 1, "quantity": -5}
+        ]
+    }
+}

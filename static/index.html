@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Order-to-Cash Orchestrator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React & ReactDOM (UMD development builds) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <!-- Babel Standalone to compile JSX in browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    const mockScenarios = {
+      "happy_path": {
+        "customer_id": 1,
+        "line_items": [
+          { "product_id": 1, "quantity": 10 },
+          { "product_id": 2, "quantity": 5 }
+        ]
+      },
+      "insufficient_inventory": {
+        "customer_id": 1,
+        "line_items": [
+          { "product_id": 1, "quantity": 10 },
+          { "product_id": 3, "quantity": 5 },
+          { "product_id": 4, "quantity": 5 }
+        ]
+      },
+      "high_risk_customer": {
+        "customer_id": 2,
+        "line_items": [
+          { "product_id": 1, "quantity": 100 }
+        ]
+      },
+      "invalid_order": {
+        "customer_id": 999,
+        "line_items": [
+          { "product_id": 1, "quantity": -5 }
+        ]
+      }
+    };
+
+    const PRODUCTS = [
+      { id: 1, name: "Widget A (Stock: 100)" },
+      { id: 2, name: "Widget B (Stock: 50)" },
+      { id: 3, name: "Widget C (Stock: 0 - Out of Stock)" },
+      { id: 4, name: "Widget D (Stock: 3 - Low)" },
+      { id: 5, name: "Gadget X (Stock: 200)" }
+    ];
+
+    const CUSTOMERS = [
+      { id: 1, name: "Clean Payer Inc (Low Risk)" },
+      { id: 2, name: "Risky Business Ltd (High Risk)" },
+      { id: 3, name: "New Client LLC (Medium Risk)" },
+      { id: 999, name: "Unknown Client (Invalid ID)" }
+    ];
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('simulator');
+      const [scenario, setScenario] = useState("happy_path");
+      const [customerId, setCustomerId] = useState(mockScenarios["happy_path"].customer_id);
+      const [lineItems, setLineItems] = useState(mockScenarios["happy_path"].line_items);
+      
+      const [result, setResult] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+
+      const handleScenarioChange = (e) => {
+        const key = e.target.value;
+        setScenario(key);
+        const data = mockScenarios[key];
+        setCustomerId(data.customer_id);
+        
+        // Deep copy the line items so we don't accidentally mutate the mock definitions
+        setLineItems(JSON.parse(JSON.stringify(data.line_items)));
+      };
+
+      const updateLineItem = (index, field, value) => {
+        const newItems = [...lineItems];
+        newItems[index][field] = value;
+        setLineItems(newItems);
+      };
+
+      const addLineItem = () => {
+        setLineItems([...lineItems, { product_id: 1, quantity: 1 }]);
+      };
+
+      const removeLineItem = (index) => {
+        const newItems = lineItems.filter((_, i) => i !== index);
+        setLineItems(newItems);
+      };
+
+      const processOrder = async () => {
+        setLoading(true);
+        setError(null);
+        setResult(null);
+        try {
+          const bodyData = {
+            customer_id: parseInt(customerId, 10) || 0,
+            line_items: lineItems.map(item => ({
+              product_id: parseInt(item.product_id, 10) || 0,
+              quantity: parseInt(item.quantity, 10) || 0
+            }))
+          };
+          const res = await fetch("/orders/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(bodyData)
+          });
+          
+          if (!res.ok) {
+            throw new Error(`Server responded with ${res.status}: ${await res.text()}`);
+          }
+          
+          const data = await res.json();
+          setResult(data);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const renderSimulator = () => (
+        <main className="content animate-fade-in">
+          <div className="left-panel glass-panel">
+            <h2>▶️ Submit Order</h2>
+            <p className="section-desc">Test the AI pipeline by submitting mock order data.</p>
+            
+            <div className="form-group">
+              <label>Select Predefined Scenario</label>
+              <div className="select-wrapper">
+                <select value={scenario} onChange={handleScenarioChange}>
+                  {Object.keys(mockScenarios).map(k => (
+                    <option key={k} value={k}>{k.replace(/_/g, ' ').toUpperCase()}</option>
+                  ))}
+                </select>
+                <span className="select-icon">▼</span>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Customer</label>
+              <div className="select-wrapper">
+                <select 
+                  value={customerId} 
+                  onChange={(e) => setCustomerId(e.target.value)} 
+                  className="form-input" 
+                >
+                  {CUSTOMERS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <span className="select-icon">▼</span>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Line Items</label>
+              <div className="line-items-container">
+                {lineItems.map((item, index) => (
+                  <div key={index} className="line-item-row">
+                    <div className="input-group" style={{flex: 2}}>
+                      <label>Product</label>
+                      <div className="select-wrapper">
+                        <select 
+                          value={item.product_id} 
+                          onChange={(e) => updateLineItem(index, 'product_id', e.target.value)} 
+                          className="form-input" 
+                        >
+                          {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <span className="select-icon">▼</span>
+                      </div>
+                    </div>
+                    <div className="input-group" style={{flex: 1}}>
+                      <label>Quantity</label>
+                      <input 
+                        type="number" 
+                        value={item.quantity} 
+                        onChange={(e) => updateLineItem(index, 'quantity', e.target.value)} 
+                        className="form-input" 
+                      />
+                    </div>
+                    <button onClick={() => removeLineItem(index)} className="btn-danger" title="Remove Item">
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addLineItem} className="btn-secondary">
+                ➕ Add Product
+              </button>
+            </div>
+
+            <button 
+              className="btn-primary" 
+              onClick={processOrder}
+              disabled={loading}
+            >
+              {loading ? <span className="spinner"></span> : <>⚙️ Process Order</>}
+            </button>
+
+            {error && (
+              <div className="error-box animate-fade-in">
+                ⚠️ {error}
+              </div>
+            )}
+          </div>
+
+          <div className="right-panel">
+            {!result && !loading && (
+              <div className="empty-state glass-panel animate-fade-in">
+                <div style={{fontSize: '3rem', marginBottom: '1rem', opacity: 0.5}}>⏱️</div>
+                <h3>Awaiting Input</h3>
+                <p>Submit an order to watch the multi-agent system process it in real-time.</p>
+              </div>
+            )}
+
+            {result && (
+              <div className="result-container animate-slide-up">
+                <div className="status-card glass-panel">
+                  <h2>Final Status: <span className={`status-badge ${result.final_status?.toLowerCase() || 'unknown'}`}>{result.final_status}</span></h2>
+                  <p>{result.message}</p>
+                </div>
+
+                <div className="timeline glass-panel">
+                  <h3>🔗 Agent Handoff Log</h3>
+                  <p className="section-desc">Trace the exact execution path of the distinct specialist AI agents.</p>
+                  <div className="timeline-items">
+                    {(result.handoff_log || []).map((log, idx) => (
+                      <div key={idx} className="timeline-item animate-fade-in" style={{ animationDelay: `${idx * 0.15}s` }}>
+                        <div className="timeline-dot"></div>
+                        <div className="timeline-content">
+                          <span className="time">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                          <div className="agents">
+                            <strong>{log.from_agent}</strong>
+                            <span className="arrow">{log.direction === 'REQUEST' ? '→' : '←'}</span>
+                            <strong>{log.to_agent}</strong>
+                          </div>
+                          <p className="summary">{log.summary}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {result.invoice && (
+                  <div className="invoice-card glass-panel animate-slide-up" style={{ animationDelay: '0.5s' }}>
+                    <h3>📄 Invoice Details</h3>
+                    <div className="invoice-meta">
+                      <span><strong>Invoice ID:</strong> {result.invoice.invoice_id}</span>
+                      <span className="fulfillment-note">ℹ️ {result.invoice.fulfillment_note}</span>
+                    </div>
+                    <table className="invoice-table">
+                      <thead>
+                        <tr>
+                          <th>Product</th>
+                          <th>Qty</th>
+                          <th>Unit Price</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(result.invoice.line_items || []).map((item, i) => (
+                          <tr key={i}>
+                            <td>{PRODUCTS.find(p => p.id === item.product_id)?.name.split(' (')[0] || `ID: ${item.product_id}`}</td>
+                            <td>{item.quantity}</td>
+                            <td>${(item.unit_price || 0).toFixed(2)}</td>
+                            <td>${(item.line_total || 0).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan="3" style={{textAlign: 'right'}}>Subtotal:</td>
+                          <td>${(result.invoice.subtotal || 0).toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan="3" style={{textAlign: 'right'}}>Tax (8%):</td>
+                          <td>${(result.invoice.tax || 0).toFixed(2)}</td>
+                        </tr>
+                        <tr className="grand-total">
+                          <td colSpan="3" style={{textAlign: 'right'}}>Total:</td>
+                          <td>${(result.invoice.total || 0).toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </main>
+      );
+
+      const renderGuide = () => (
+        <main className="guide-content animate-fade-in">
+          <div className="glass-panel guide-card">
+            <h2>📖 User Guide & Documentation</h2>
+            <p className="guide-subtitle">Understand how the Multi-Agent Order-to-Cash Orchestrator operates behind the scenes.</p>
+            
+            <div className="guide-section">
+              <h3>What is this?</h3>
+              <p>This is a live, visual demonstration of an AI-driven multi-agent system. Instead of a single monolithic script processing an order, this pipeline uses specialized, bounded "Agents" that communicate with one another to fulfill a sales order from validation to payment risk assessment.</p>
+            </div>
+
+            <div className="guide-section">
+              <h3>How to Use the Simulator</h3>
+              <ol className="guide-steps">
+                <li>Navigate to the <strong>Simulator</strong> tab.</li>
+                <li>Select a pre-defined scenario from the dropdown (e.g., Happy Path, Insufficient Inventory).</li>
+                <li>You can optionally edit the raw JSON payload to test edge cases.</li>
+                <li>Click <strong>Process Order</strong>.</li>
+                <li>Watch the right panel populate with the live <strong>Agent Handoff Log</strong> and the final invoice.</li>
+              </ol>
+            </div>
+
+            <div className="guide-section">
+              <h3>The Agent Architecture</h3>
+              <div className="agent-grid">
+                <div className="agent-card">
+                  <div className="agent-icon" style={{fontSize: '24px'}}>🗄️</div>
+                  <h4>1. Order Orchestrator</h4>
+                  <p>The central router. It doesn't perform domain logic. It simply maintains the state machine (status) and sequentially routes the payload to the appropriate specialist agents.</p>
+                </div>
+                
+                <div className="agent-card">
+                  <div className="agent-icon" style={{fontSize: '24px'}}>✅</div>
+                  <h4>2. Validation Agent</h4>
+                  <p>The first line of defense. Checks if the customer ID and product IDs exist in the SQLite database and ensures quantities are valid.</p>
+                </div>
+
+                <div className="agent-card">
+                  <div className="agent-icon" style={{fontSize: '24px'}}>📦</div>
+                  <h4>3. Inventory Agent</h4>
+                  <p>Checks stock levels. <strong>Exception Path Handling:</strong> If an item is out of stock, this agent intelligently decides whether to fully reject the order or propose a "Partial Fulfillment".</p>
+                </div>
+
+                <div className="agent-card">
+                  <div className="agent-icon" style={{fontSize: '24px'}}>📄</div>
+                  <h4>4. Invoicing Agent</h4>
+                  <p>Calculates the math. Takes the fulfillable items and computes subtotals, an 8% tax rate, and the final total to generate the digital invoice.</p>
+                </div>
+
+                <div className="agent-card special">
+                  <div className="agent-icon" style={{fontSize: '24px'}}>🤖</div>
+                  <h4>5. Payment Risk Agent (LLM)</h4>
+                  <p>This is the only agent that uses an LLM (Claude 3.5 Sonnet). It acts as a financial analyst, evaluating the customer's payment history to assign a strict HIGH, MEDIUM, or LOW risk level.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      );
+
+      return (
+        <div className="container">
+          <nav className="navbar glass-panel">
+            <div className="nav-brand">
+              <span style={{marginRight: '8px'}}>🌀</span> O2C Orchestrator
+            </div>
+            <div className="nav-links">
+              <button 
+                className={`nav-btn ${activeTab === 'simulator' ? 'active' : ''}`}
+                onClick={() => setActiveTab('simulator')}
+              >
+                ▶️ Simulator
+              </button>
+              <button 
+                className={`nav-btn ${activeTab === 'guide' ? 'active' : ''}`}
+                onClick={() => setActiveTab('guide')}
+              >
+                📖 User Guide
+              </button>
+            </div>
+          </nav>
+
+          {activeTab === 'simulator' ? renderSimulator() : renderGuide()}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
