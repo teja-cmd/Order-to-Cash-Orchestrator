@@ -21,16 +21,31 @@ st.title("Multi-Agent Order-to-Cash Orchestrator")
 st.markdown("Submit an order to the multi-agent system and watch the real-time handoff log.")
 
 # Load site CSS from the repo `static/styles.css` so Streamlit shows the same styling
-def _load_local_css(path):
+def _load_css_with_fallback(local_path, raw_url=None):
+    css = None
+    # Try local file first
     try:
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(local_path, 'r', encoding='utf-8') as f:
             css = f.read()
-        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
     except Exception:
-        pass
+        css = None
+
+    # If local failed and a raw URL is provided, try fetching it
+    if not css and raw_url:
+        try:
+            resp = requests.get(raw_url, timeout=5)
+            if resp.status_code == 200:
+                css = resp.text
+        except Exception:
+            css = None
+
+    # Inject CSS if we have it
+    if css:
+        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 css_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'styles.css')
-_load_local_css(css_file)
+raw_css_url = "https://raw.githubusercontent.com/teja-cmd/Order-to-Cash-Orchestrator/main/static/styles.css"
+_load_css_with_fallback(css_file, raw_css_url)
 
 # Load mock data
 data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
