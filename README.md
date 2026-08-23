@@ -62,7 +62,7 @@ The assessment required handling at least one failure/exception path. This proje
 - **Data Validation**: Pydantic v2
 - **Database**: SQLite (via SQLAlchemy) for mock inventory, customers, and payment histories.
 - **Frontend**: React 18 (Standalone) with custom vanilla CSS (Glassmorphism & CSS Animations). Served natively via FastAPI `StaticFiles`.
-- **AI / LLM**: Anthropic API (`claude-3-5-sonnet-20241022`).
+- **AI / LLM**: Anthropic API.
 - **Testing**: Pytest.
 
 ---
